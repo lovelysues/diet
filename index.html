@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -225,6 +224,7 @@
     align-items: center;
     gap: 0.4rem;
     margin-bottom: 0.6rem;
+    flex-wrap: wrap;
   }
   .weight-row label { font-size: 0.75rem; color: var(--gray); }
   .weight-row input {
@@ -344,18 +344,41 @@
     position: relative; height: 32px;
     background: var(--green-light);
     border-radius: 16px;
-    overflow: hidden;
+    overflow: visible;
   }
   .turtle-fill {
     height: 100%;
+    border-radius: 16px;
+    overflow: hidden;
     background: linear-gradient(90deg, var(--green-mid), var(--green));
     border-radius: 16px;
     transition: width 0.5s;
   }
   .turtle-emoji {
-    position: absolute; top: 50%; transform: translateY(-50%);
+    position: absolute; top: 50%;
+    transform: translateY(-50%) scaleX(-1);
     font-size: 1.2rem;
     transition: left 0.5s;
+  }
+  .turtle-weight-tag {
+    position: absolute;
+    top: -22px;
+    transform: translateX(-50%);
+    font-size: 0.68rem;
+    font-weight: 800;
+    white-space: nowrap;
+    background: #fff;
+    border-radius: 8px;
+    padding: 1px 6px;
+    border: 1.5px solid var(--green-mid);
+    color: var(--green);
+    transition: left 0.5s;
+    pointer-events: none;
+  }
+  .turtle-weight-tag.gain { color: var(--red); border-color: #f3c9c3; }
+  .turtle-weight-tag.same { color: var(--gray); border-color: var(--border); }
+  .turtle-diff-label {
+    font-weight: 800;
   }
   .turtle-milestones {
     display: flex; justify-content: space-between;
@@ -401,6 +424,22 @@
     <h1>🌿 4주 Diet Plan</h1>
     <p>시작 날짜와 목표 체중을 입력하면 플래너가 생성됩니다.</p>
     <div class="setup-field">
+      <label>👤 닉네임</label>
+      <select id="nickname-input" style="width:100%; padding:0.7rem 1rem; border:1.5px solid var(--border); border-radius:10px; font-size:1rem; color:var(--text); background:var(--bg); outline:none;">
+        <option value="">선택해주세요</option>
+        <option value="날씬한*임이">날씬한*임이</option>
+        <option value="24인치Chloe">24인치Chloe</option>
+        <option value="다이어트곧끝날율">다이어트곧끝날율</option>
+        <option value="프로수영러">프로수영러</option>
+        <option value="미라클모닝">미라클모닝</option>
+        <option value="위태로운서현">위태로운서현</option>
+      </select>
+      <button onclick="loadFromSheet()" style="margin-top:0.6rem; width:100%; padding:0.6rem; background:var(--green-light); color:var(--green); border:1.5px solid var(--green-mid); border-radius:10px; font-size:0.85rem; font-weight:700; cursor:pointer;">
+        🔄 이전 기록 불러오기
+      </button>
+      <p id="load-status" style="font-size:0.78rem; color:var(--gray); margin-top:0.4rem; margin-bottom:0;"></p>
+    </div>
+    <div class="setup-field">
       <label>📅 시작 날짜</label>
       <input type="date" id="start-date-input">
     </div>
@@ -420,7 +459,7 @@
 <div id="app">
   <header>
     <h1>🌿 4주 완성 Diet Plan</h1>
-    <p class="subtitle">지방 대사 스위치 켜기 · 대사유연성 회복 · 체지방 감량 극대화</p>
+    <p class="subtitle" id="nickname-display"></p>
     <div class="badges">
       <span class="badge">💧 물 2L+</span>
       <span class="badge">😴 수면 6h+</span>
@@ -486,10 +525,11 @@
 </div>
 
 <!-- turtle progress (fixed bottom) -->
-<div class="turtle-section">
-  <div class="turtle-label">🐢 28일 여정</div>
+<div class="turtle-section" id="turtle-section" style="display:none;">
+  <div class="turtle-label"><span style="display:inline-block;transform:scaleX(-1);">🐢</span> 28일 여정 <span id="turtle-diff-label" class="turtle-diff-label"></span></div>
   <div class="turtle-track">
     <div class="turtle-fill" id="turtle-fill" style="width:0%"></div>
+    <div class="turtle-weight-tag" id="turtle-weight-tag" style="left:0%"></div>
     <div class="turtle-emoji" id="turtle-emoji" style="left:0%">🐢</div>
   </div>
   <div class="turtle-milestones">
@@ -510,7 +550,6 @@ const STAGE_LABELS = {
   26: '5단계', 27: '5단계', 28: '5단계',
 };
 
-// Regular meals per day (1~14)
 const REGULAR_MEALS = {
   1:  [{icon:'🌅',label:'아침',ph:'쉐이크'},{icon:'☀️',label:'점심',ph:'쉐이크'},{icon:'🌤',label:'간식',ph:'쉐이크'},{icon:'🌙',label:'저녁',ph:'쉐이크'}],
   2:  [{icon:'🌅',label:'아침',ph:'쉐이크'},{icon:'☀️',label:'점심',ph:'쉐이크'},{icon:'🌤',label:'간식',ph:'쉐이크'},{icon:'🌙',label:'저녁',ph:'쉐이크'}],
@@ -527,18 +566,47 @@ const REGULAR_MEALS = {
   13: [{icon:'🌅',label:'아침',ph:'쉐이크'},{icon:'☀️',label:'점심',ph:'저탄수식'},{icon:'🌤',label:'간식',ph:'쉐이크'},{icon:'🌙',label:'저녁',ph:'무탄수식'}],
   14: [{icon:'🌅',label:'아침',ph:'쉐이크'},{icon:'☀️',label:'점심',ph:'저탄수식'},{icon:'🌤',label:'간식',ph:'쉐이크'},{icon:'🌙',label:'저녁',ph:'무탄수식'}],
 };
-// 3~4주차: 단식이 아닌 날
 const WEEK34_MEALS = [{icon:'🌅',label:'아침',ph:'쉐이크'},{icon:'☀️',label:'점심',ph:'저탄수식'},{icon:'🌤',label:'간식',ph:'쉐이크'},{icon:'🌙',label:'저녁',ph:'무탄수식'}];
 const FASTING_MEALS = [{icon:'💧',label:'종일',ph:'물·블랙커피·녹차만'},{icon:'🌙',label:'종료 후',ph:'고단백 식사'}];
 
 // ── STATE ──────────────────────────────────────────────
 let startDate = null;
-let data = {}; // { day: { weight, meals: {아침,점심,간식,저녁}, fasting } }
-let week2FastDay = null;  // 2주차 선택 단식일 (8~14 중 1개)
-let week3FastDays = [];   // 3주차 (15~21 중 2개)
-let week4FastDays = [];   // 4주차 (22~28 중 2개)
+let data = {};
+let week2FastDay = null;
+let week3FastDays = [];
+let week4FastDays = [];
 
 const STORAGE_KEY = 'diet_plan_v2';
+const SHEET_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbx3y11BGCFGOMiBCiMv8ZRixmunng2Wdtk02i7ZZv76lsdDDg5pSd7lWCUf9GZIiP89_w/exec';
+
+function sendToSheet(dayNum) {
+  if (!data.header?.nickname) return;
+  const payload = {
+    name: data.header.nickname,
+    day: dayNum,
+    date: formatDateInput(getDateForDay(dayNum)),
+    weight: data[dayNum]?.weight || '',
+    bodyFat: data[dayNum]?.bodyFat || '',
+    startWeight: data.header.start || '',
+    goalWeight: data.header.goal || '',
+    fasting: isFastingDay(dayNum),
+    meals: data[dayNum]?.meals || {},
+    exercise: data[dayNum]?.exercise || '',
+    sleep: data[dayNum]?.sleep || ''
+  };
+  fetch(SHEET_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  }).catch(err => console.log('전송 실패(무시 가능):', err));
+}
+
+// 입력 멈춘 후 1.2초 지나면 한 번만 전송 (너무 자주 전송되는 것 방지)
+const sendTimers = {};
+function sendToSheetDebounced(dayNum) {
+  if (sendTimers[dayNum]) clearTimeout(sendTimers[dayNum]);
+  sendTimers[dayNum] = setTimeout(() => sendToSheet(dayNum), 1200);
+}
 
 function saveAll() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -558,12 +626,10 @@ function loadAll() {
   return !!startDate;
 }
 
-// ── INIT ──────────────────────────────────────────────
 window.onload = () => {
   if (loadAll()) {
     showApp();
   } else {
-    // prefill today
     const today = new Date();
     document.getElementById('start-date-input').value = formatDateInput(today);
   }
@@ -573,13 +639,70 @@ function formatDateInput(d) {
   return d.toISOString().slice(0,10);
 }
 
+function loadFromSheet() {
+  const nickname = document.getElementById('nickname-input').value;
+  const statusEl = document.getElementById('load-status');
+  if (!nickname) { alert('먼저 닉네임을 선택해주세요.'); return; }
+
+  statusEl.textContent = '⏳ 불러오는 중...';
+
+  fetch(`${SHEET_WEBHOOK_URL}?name=${encodeURIComponent(nickname)}`)
+    .then(res => res.json())
+    .then(res => {
+      if (res.result === 'empty') {
+        statusEl.textContent = '저장된 기록이 없어요. 새로 시작해주세요!';
+        return;
+      }
+      if (res.result !== 'success') {
+        statusEl.textContent = '불러오기 실패. 다시 시도해주세요.';
+        return;
+      }
+
+      const day1 = res.days.find(d => d.day === 1) || res.days.sort((a,b)=>a.day-b.day)[0];
+      let computedStart = null;
+      if (day1 && day1.date) {
+        const d = new Date(day1.date + 'T00:00:00');
+        d.setDate(d.getDate() - (day1.day - 1));
+        computedStart = formatDateInput(d);
+      }
+
+      data = { header: { nickname: nickname, start: res.header.start, goal: res.header.goal } };
+      res.days.forEach(d => {
+        data[d.day] = {
+          weight: d.weight,
+          bodyFat: d.bodyFat,
+          exercise: d.exercise,
+          sleep: d.sleep,
+          meals: d.meals
+        };
+        if (d.fasting) {
+          if (d.day >= 8 && d.day <= 14) week2FastDay = d.day;
+          else if (d.day >= 15 && d.day <= 21) { if (!week3FastDays.includes(d.day)) week3FastDays.push(d.day); }
+          else if (d.day >= 22 && d.day <= 28) { if (!week4FastDays.includes(d.day)) week4FastDays.push(d.day); }
+        }
+      });
+
+      startDate = computedStart || formatDateInput(new Date());
+      saveAll();
+      statusEl.textContent = '✅ 불러왔어요! 곧 시작됩니다...';
+      setTimeout(showApp, 600);
+    })
+    .catch(err => {
+      console.log(err);
+      statusEl.textContent = '⚠️ 네트워크 오류. 다시 시도해주세요.';
+    });
+}
+
 function startPlan() {
+  const nickname = document.getElementById('nickname-input').value;
+  if (!nickname) { alert('닉네임을 선택해주세요.'); return; }
   const sd = document.getElementById('start-date-input').value;
   if (!sd) { alert('시작 날짜를 입력해주세요.'); return; }
   startDate = sd;
   const cw = document.getElementById('current-weight-input').value;
   const gw = document.getElementById('goal-weight-input').value;
   if (!data.header) data.header = {};
+  data.header.nickname = nickname;
   if (cw) data.header.start = cw;
   if (gw) data.header.goal = gw;
   saveAll();
@@ -595,14 +718,16 @@ function resetPlan() {
 function showApp() {
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
+  document.getElementById('turtle-section').style.display = 'block';
 
-  // start bar
+  const nickEl = document.getElementById('nickname-display');
+  if (nickEl) nickEl.textContent = `👤 ${data.header?.nickname || ''}  ·  지방 대사 스위치 켜기`;
+
   const d = new Date(startDate + 'T00:00:00');
   const end = new Date(d); end.setDate(end.getDate() + 27);
   document.getElementById('start-bar-text').textContent =
     `📅 ${formatKo(d)} 시작 → ${formatKo(end)} 완료`;
 
-  // header weights
   if (data.header) {
     if (data.header.start) document.getElementById('hdr-start-kg').value = data.header.start;
     if (data.header.goal) document.getElementById('hdr-goal-kg').value = data.header.goal;
@@ -616,6 +741,7 @@ function saveHeaderWeight(type, val) {
   if (!data.header) data.header = {};
   data.header[type] = val;
   saveAll();
+  updateTurtle();
 }
 
 function formatKo(d) {
@@ -638,7 +764,6 @@ function formatDay(d) {
   return `${d.getMonth()+1}/${d.getDate()} (${days[d.getDay()]})`;
 }
 
-// ── RENDER ──────────────────────────────────────────────
 const WEEKS = [
   { num:1, days:[1,2,3,4,5,6,7], title:'1주차', desc:'지방 대사 스위치 켜기', note:'장 휴식 → 렙틴 저항성 개선' },
   { num:2, days:[8,9,10,11,12,13,14], title:'2주차', desc:'간헐적 단식 + 인슐린 저항성 개선', note:'하루 2식 + 쉐이크 2회 | ☕ 블랙커피 오전 1잔 OK' },
@@ -660,13 +785,11 @@ function renderWeeks() {
     const sec = document.createElement('div');
     sec.className = 'week-section';
 
-    // week header
     const hdr = document.createElement('div');
     hdr.className = 'week-header';
     hdr.innerHTML = `<h2>${w.title}</h2><div class="week-desc">${w.desc}</div><div class="week-note">${w.note}</div>`;
     sec.appendChild(hdr);
 
-    // 2주차: 단식일 선택 안내
     if (w.num === 2) {
       const picker = document.createElement('div');
       picker.className = 'fast-picker-note';
@@ -684,7 +807,6 @@ function renderWeeks() {
       sec.appendChild(picker);
     }
 
-    // day cards
     w.days.forEach(dayNum => {
       sec.appendChild(renderDayCard(dayNum, w.num));
     });
@@ -702,7 +824,6 @@ function renderDayCard(dayNum, weekNum) {
   card.className = 'day-card' + (fasting ? ' fasting' : '');
   card.id = `day-${dayNum}`;
 
-  // day top
   const top = document.createElement('div');
   top.className = 'day-top';
 
@@ -724,7 +845,6 @@ function renderDayCard(dayNum, weekNum) {
   meta.appendChild(dateEl);
   meta.appendChild(stageEl);
 
-  // fasting toggle (2주차 1회, 3~4주차 2회)
   let toggleArea = null;
   if (weekNum >= 2) {
     toggleArea = document.createElement('div');
@@ -749,7 +869,6 @@ function renderDayCard(dayNum, weekNum) {
   if (toggleArea) top.appendChild(toggleArea);
   card.appendChild(top);
 
-  // weight
   const startKg = parseFloat(data.header?.start) || null;
   const wr = document.createElement('div');
   wr.className = 'weight-row';
@@ -774,18 +893,39 @@ function renderDayCard(dayNum, weekNum) {
     data[dayNum].weight = wInput.value;
     updateDiff();
     saveAll();
+    updateTurtle();
+    sendToSheetDebounced(dayNum);
   });
   updateDiff();
   wr.appendChild(wInput);
   wr.appendChild(document.createTextNode(' kg'));
   wr.appendChild(diffSpan);
+
+  // 체지방률
+  const bfLabel = document.createElement('label');
+  bfLabel.style.marginLeft = '0.5rem';
+  bfLabel.textContent = '체지방';
+  const bfInput = document.createElement('input');
+  bfInput.type = 'number';
+  bfInput.step = '0.1';
+  bfInput.placeholder = '%';
+  bfInput.style.width = '58px';
+  if (data[dayNum]?.bodyFat) bfInput.value = data[dayNum].bodyFat;
+  bfInput.addEventListener('input', () => {
+    if (!data[dayNum]) data[dayNum] = {};
+    data[dayNum].bodyFat = bfInput.value;
+    saveAll();
+    sendToSheetDebounced(dayNum);
+  });
+  wr.appendChild(bfLabel);
+  wr.appendChild(bfInput);
+  wr.appendChild(document.createTextNode(' %'));
+
   card.appendChild(wr);
 
-  // extra: exercise & sleep
   const extraRows = document.createElement('div');
   extraRows.className = 'extra-rows';
 
-  // exercise
   const exRow = document.createElement('div');
   exRow.className = 'extra-row';
   exRow.innerHTML = `<span class="extra-icon">🏃</span><span class="extra-label">운동</span>`;
@@ -798,11 +938,11 @@ function renderDayCard(dayNum, weekNum) {
     if (!data[dayNum]) data[dayNum] = {};
     data[dayNum].exercise = exInp.value;
     saveAll();
+    sendToSheetDebounced(dayNum);
   });
   exRow.appendChild(exInp);
   extraRows.appendChild(exRow);
 
-  // sleep
   const slRow = document.createElement('div');
   slRow.className = 'extra-row';
   slRow.innerHTML = `<span class="extra-icon">😴</span><span class="extra-label">수면</span>`;
@@ -819,6 +959,7 @@ function renderDayCard(dayNum, weekNum) {
     if (!data[dayNum]) data[dayNum] = {};
     data[dayNum].sleep = slInp.value;
     saveAll();
+    sendToSheetDebounced(dayNum);
   });
   const slUnit = document.createElement('span');
   slUnit.className = 'sleep-unit';
@@ -829,7 +970,6 @@ function renderDayCard(dayNum, weekNum) {
 
   card.appendChild(extraRows);
 
-  // meals
   const mealDefs = fasting ? FASTING_MEALS
     : (weekNum <= 2 ? (REGULAR_MEALS[dayNum] || WEEK34_MEALS) : WEEK34_MEALS);
 
@@ -850,6 +990,7 @@ function renderDayCard(dayNum, weekNum) {
       if (!data[dayNum].meals) data[dayNum].meals = {};
       data[dayNum].meals[m.label] = inp.value;
       saveAll();
+      sendToSheetDebounced(dayNum);
     });
     row.appendChild(inp);
     mealsDiv.appendChild(row);
@@ -866,7 +1007,6 @@ function handleFastToggle(dayNum, weekNum, cb) {
     } else {
       if (week2FastDay === dayNum) week2FastDay = null;
     }
-    // uncheck others in week 2
     [8,9,10,11,12,13,14].forEach(d => {
       if (d !== dayNum) {
         const el = document.getElementById(`fast-cb-${d}`);
@@ -882,13 +1022,13 @@ function handleFastToggle(dayNum, weekNum, cb) {
     toggleWeekFast(dayNum, week4FastDays, [22,23,24,25,26,27,28], 2, cb);
   }
   saveAll();
-  renderWeeks(); // re-render to update meal templates
+  renderWeeks();
   updateTurtle();
+  sendToSheetDebounced(dayNum);
 }
 
 function toggleWeekFast(dayNum, arr, range, maxCount, cb) {
   if (cb.checked) {
-    // check consecutive
     if (arr.includes(dayNum - 1) || arr.includes(dayNum + 1)) {
       alert('연속된 날은 단식일로 지정할 수 없어요!');
       cb.checked = false;
@@ -915,6 +1055,39 @@ function updateTurtle() {
   const emojiLeft = Math.min(pct * 100, 95);
   document.getElementById('turtle-fill').style.width = fillPct + '%';
   document.getElementById('turtle-emoji').style.left = emojiLeft + '%';
+
+  // 시작 체중 대비 가장 최근 입력된 체중 차이 계산
+  const startKg = parseFloat(data.header?.start);
+  const tag = document.getElementById('turtle-weight-tag');
+  const headerLabel = document.getElementById('turtle-diff-label');
+
+  let latestDay = 0, latestWeight = NaN;
+  for (let d = 1; d <= 28; d++) {
+    const w = parseFloat(data[d]?.weight);
+    if (!isNaN(w)) { latestDay = d; latestWeight = w; }
+  }
+
+  if (tag) {
+    if (!isNaN(startKg) && !isNaN(latestWeight)) {
+      const delta = +(latestWeight - startKg).toFixed(1);
+      let text, cls;
+      if (delta < 0)      { text = `${delta}kg`;        cls = 'loss'; }
+      else if (delta > 0) { text = `+${delta}kg`;       cls = 'gain'; }
+      else                { text = `±0kg`;              cls = 'same'; }
+      tag.textContent = text;
+      tag.className = 'turtle-weight-tag ' + cls;
+      tag.style.left = emojiLeft + '%';
+      tag.style.display = 'block';
+
+      if (headerLabel) {
+        headerLabel.textContent = `(${text})`;
+        headerLabel.style.color = delta < 0 ? '#2a7a4e' : (delta > 0 ? '#c0392b' : '#6b7280');
+      }
+    } else {
+      tag.style.display = 'none';
+      if (headerLabel) headerLabel.textContent = '';
+    }
+  }
 }
 </script>
 </body>
